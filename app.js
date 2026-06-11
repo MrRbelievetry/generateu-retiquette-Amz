@@ -10,6 +10,7 @@ const DEFAULT_SENDER = [
 ];
 
 const STORAGE_KEY = "label_maker_v3_sender";
+const APP_VERSION = "3.1";
 const PAGE_WIDTH = 792;
 const PAGE_HEIGHT = 612;
 const SENDER_X = 22;
@@ -106,7 +107,9 @@ async function extractAddressesFromPdf(file) {
 }
 
 function stripTrailingFrance(lines) {
-  const cleaned = [...lines];
+  // Sécurité V3.1 : on retire tout libellé technique qui aurait été conservé
+  // par une ancienne extraction ou un cache navigateur.
+  const cleaned = [...lines].filter((line) => normalizeSpaces(line).toUpperCase() !== "DESTINATAIRE");
   if (cleaned.length && normalizeSpaces(cleaned[cleaned.length - 1]).toUpperCase() === "FRANCE") {
     cleaned.pop();
   }
@@ -225,7 +228,7 @@ function generateLabelsPdf(addresses, senderLines, crossSender) {
     drawRecipientBlock(doc, address);
   });
 
-  doc.save("etiquettes_label_maker_v3.pdf");
+  doc.save("etiquettes_label_maker_v3_1.pdf");
 }
 
 async function generate() {

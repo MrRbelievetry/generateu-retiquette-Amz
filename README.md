@@ -1,8 +1,8 @@
-# Label Maker V3
+# Label Maker V3.1
 
 Application web statique pour générer des étiquettes d'expédition à partir d'un PDF Amazon.
 
-## Fonctionnalités V3
+## Fonctionnalités V3.1
 
 - Import d'un PDF Amazon depuis le navigateur
 - Extraction des adresses d'expédition
@@ -13,7 +13,7 @@ Application web statique pour générer des étiquettes d'expédition à partir 
 - Code postal + ville sur une seule ligne
 - Ville en majuscules
 - Ligne CP + VILLE plus grande avec taille adaptative pour rester sur une seule ligne
-- Suppression du libellé "Destinataire" sur les étiquettes
+- Suppression définitive du libellé "Destinataire" sur les étiquettes
 - Bloc adresse mieux centré verticalement
 - Aucun serveur : tout se fait côté navigateur
 
@@ -31,3 +31,7 @@ Application web statique pour générer des étiquettes d'expédition à partir 
 ## Confidentialité
 
 Le PDF Amazon est traité directement dans le navigateur. Il n'est pas envoyé à un serveur.
+
+## Note V3.1
+
+Le fichier `index.html` charge `app.js?v=3.1` pour éviter que le navigateur utilise une ancienne version en cache.
