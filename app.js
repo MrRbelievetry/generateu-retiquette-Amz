@@ -1,263 +1,346 @@
-/* global pdfjsLib, jspdf */
+/* Label Maker V4
+   - Amz : extraction depuis "Adresse d'expédition"
+   - Ebay : extraction depuis "Adresse de livraison"
+   - HennD : extraction depuis "Adresse de livraison"
+   - Génération PDF locale dans le navigateur
+*/
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const DEFAULT_SENDER = [
-  "Expéditeur : Entreprise Rebai",
-  "Lieu dit la Planche",
-  "89350 Villeneuve les genets",
-  "FRANCE"
-];
-
-const STORAGE_KEY = "label_maker_v3_sender";
-const APP_VERSION = "3.1";
-const PAGE_WIDTH = 792;
-const PAGE_HEIGHT = 612;
-const SENDER_X = 22;
-const SENDER_Y_TOP = 20;
-const SENDER_W = 235;
-const SENDER_H = 95;
-const RECIPIENT_MAX_W = 500;
-const RECIPIENT_BLOCK_CENTER_Y = 350;
-const RECIPIENT_NAME_START = 24.0;
-const RECIPIENT_BODY_START = 19.0;
-const RECIPIENT_POSTAL_CITY_START = 34.0;
-const RECIPIENT_POSTAL_CITY_MIN = 18.0;
-const POSTAL_CODE_REGEX = /^\d{5}$/;
+const STORAGE_KEY = "labelmaker_sender_v4";
 
 const $ = (id) => document.getElementById(id);
-const senderInputs = [$("sender1"), $("sender2"), $("sender3"), $("sender4")];
-
-function setStatus(message, type = "") {
-  const status = $("status");
-  status.textContent = message;
-  status.className = `status ${type}`.trim();
-}
 
 function normalizeSpaces(value) {
-  return String(value || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim();
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
-function cleanAddressLines(lines) {
-  const cleaned = [];
-  for (const rawLine of lines) {
-    const line = normalizeSpaces(rawLine);
-    if (line && !cleaned.includes(line)) cleaned.push(line);
+function cleanLines(lines) {
+  const out = [];
+  for (const raw of lines) {
+    const line = normalizeSpaces(raw);
+    if (!line) continue;
+    if (!out.includes(line)) out.push(line);
   }
-  return cleaned;
+  return out;
+}
+
+function stripCountryAndPhone(lines) {
+  return lines.filter((line) => {
+    const clean = normalizeSpaces(line);
+    if (/^france$/i.test(clean)) return false;
+    if (/^\+?\d[\d\s().-]{7,}$/.test(clean)) return false;
+    return true;
+  });
+}
+
+function uppercaseCityLine(line) {
+  const m = normalizeSpaces(line).match(/^(\d{5})\s+(.+)$/);
+  if (!m) return normalizeSpaces(line);
+  return `${m[1]} ${m[2].toUpperCase()}`;
+}
+
+function mergePostalCodeCity(lines) {
+  const arr = cleanLines(lines);
+  for (let i = 0; i < arr.length - 1; i++) {
+    if (/^\d{5}$/.test(arr[i]) && arr[i + 1]) {
+      arr[i] = `${arr[i]} ${arr[i + 1]}`;
+      arr.splice(i + 1, 1);
+      break;
+    }
+  }
+  return arr.map((line) => /^\d{5}\s+/.test(line) ? uppercaseCityLine(line) : line);
+}
+
+function extractAmazon(text) {
+  const matches = [...text.matchAll(/Adresse d['’]expédition\s*:?\s*([\s\S]*?)(?=Num[ée]ro de la commande|Date de commande|Service de livraison)/gi)];
+  if (!matches.length) throw new Error("Bloc Adresse d'expédition introuvable.");
+
+  let best = [];
+  let bestScore = -1;
+
+  for (const match of matches) {
+    let lines = cleanLines(match[1].split(/\r?\n/));
+    lines = stripCountryAndPhone(lines);
+    lines = mergePostalCodeCity(lines);
+    const score = lines.join(" ").length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = lines;
+    }
+  }
+
+  if (!best.length) throw new Error("Adresse Amazon vide.");
+  return best;
+}
+
+function extractEbay(text) {
+  const match = text.match(/Adresse de livraison\s*([\s\S]*?)(?=Lien du QR code|FACTURE\/BORDEREAU|Objet\s+Quantité|$)/i);
+  if (!match) throw new Error("Bloc Adresse de livraison eBay introuvable.");
+
+  let lines = cleanLines(match[1].split(/\r?\n/));
+  lines = stripCountryAndPhone(lines);
+
+  // eBay ajoute parfois la région après une virgule : "59330 Hautmont, Nord-Pas-de-Calais"
+  lines = lines.map((line) => {
+    const clean = normalizeSpaces(line);
+    if (/^\d{5}\s+/.test(clean) && clean.includes(",")) {
+      return clean.split(",")[0].trim();
+    }
+    return clean;
+  });
+
+  lines = mergePostalCodeCity(lines);
+  if (!lines.length) throw new Error("Adresse eBay vide.");
+  return lines;
+}
+
+function extractHennD(text) {
+  const match = text.match(/Adresse de livraison\s*([\s\S]*?)(?=Adresse de facturation|Num[ée]ro de facture|Référence\s+Produit|$)/i);
+  if (!match) throw new Error("Bloc Adresse de livraison HennD introuvable.");
+
+  let lines = cleanLines(match[1].split(/\r?\n/));
+  lines = stripCountryAndPhone(lines);
+  lines = mergePostalCodeCity(lines);
+
+  if (!lines.length) throw new Error("Adresse HennD vide.");
+  return lines;
+}
+
+function extractAddressByPlatform(text, platform) {
+  if (platform === "amazon") return extractAmazon(text);
+  if (platform === "ebay") return extractEbay(text);
+  if (platform === "hennd") return extractHennD(text);
+  throw new Error("Source PDF inconnue.");
+}
+
+async function readPdfPages(file) {
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pages = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const items = content.items || [];
+
+    // Regroupement par lignes visuelles pour garder un texte exploitable.
+    const rows = [];
+    for (const item of items) {
+      const y = Math.round(item.transform[5]);
+      const x = item.transform[4];
+      const str = normalizeSpaces(item.str);
+      if (!str) continue;
+
+      let row = rows.find((r) => Math.abs(r.y - y) <= 2);
+      if (!row) {
+        row = { y, items: [] };
+        rows.push(row);
+      }
+      row.items.push({ x, str });
+    }
+
+    rows.sort((a, b) => b.y - a.y);
+    const lines = rows.map((row) =>
+      row.items.sort((a, b) => a.x - b.x).map((it) => it.str).join(" ")
+    );
+
+    pages.push(lines.join("\n"));
+  }
+
+  return pages;
 }
 
 function saveSender() {
-  const lines = senderInputs.map((input) => input.value.trim()).filter(Boolean);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
+  const data = {
+    sender1: $("sender1").value,
+    sender2: $("sender2").value,
+    sender3: $("sender3").value,
+    sender4: $("sender4").value,
+    crossSender: $("crossSender").checked,
+    platform: $("platform").value,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function loadSender() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-    const lines = Array.isArray(saved) && saved.length ? saved : DEFAULT_SENDER;
-    senderInputs.forEach((input, index) => { input.value = lines[index] || ""; });
-  } catch {
-    senderInputs.forEach((input, index) => { input.value = DEFAULT_SENDER[index] || ""; });
-  }
-}
-
-function resetSender() {
-  senderInputs.forEach((input, index) => { input.value = DEFAULT_SENDER[index] || ""; });
-  saveSender();
-  setStatus("Adresse expéditeur réinitialisée.", "success");
-}
-
-function extractShippingAddressFromText(text) {
-  const regex = /Adresse d['’]expédition\s*:?\s*([\s\S]*?)(?=Num[ée]ro de la commande|Date de commande|Service de livraison)/gi;
-  const matches = [...text.matchAll(regex)];
-  if (!matches.length) throw new Error("Bloc 'Adresse d'expédition' introuvable.");
-
-  let bestLines = [];
-  let bestScore = -1;
-
-  for (const match of matches) {
-    const lines = cleanAddressLines(match[1].split(/\r?\n/));
-    const score = lines.reduce((total, line) => total + line.length, 0);
-    if (score > bestScore) {
-      bestScore = score;
-      bestLines = lines;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    for (const key of ["sender1", "sender2", "sender3", "sender4"]) {
+      if (typeof data[key] === "string") $(key).value = data[key];
     }
-  }
-
-  if (!bestLines.length) throw new Error("Adresse d'expédition vide.");
-  return bestLines;
+    if (typeof data.crossSender === "boolean") $("crossSender").checked = data.crossSender;
+    if (typeof data.platform === "string") $("platform").value = data.platform;
+  } catch (_) {}
 }
 
-async function extractAddressesFromPdf(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const addresses = [];
-
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const lines = content.items
-      .map((item) => item.str)
-      .join("\n");
-    addresses.push(extractShippingAddressFromText(lines));
-  }
-
-  return addresses;
+function getSenderLines() {
+  return ["sender1", "sender2", "sender3", "sender4"]
+    .map((id) => normalizeSpaces($(id).value))
+    .filter(Boolean);
 }
 
-function stripTrailingFrance(lines) {
-  // Sécurité V3.1 : on retire tout libellé technique qui aurait été conservé
-  // par une ancienne extraction ou un cache navigateur.
-  const cleaned = [...lines].filter((line) => normalizeSpaces(line).toUpperCase() !== "DESTINATAIRE");
-  if (cleaned.length && normalizeSpaces(cleaned[cleaned.length - 1]).toUpperCase() === "FRANCE") {
-    cleaned.pop();
-  }
-  return cleaned;
-}
-
-function fitFontSize(doc, lines, maxWidth, startSize, minSize) {
-  let size = startSize;
-  while (size >= minSize) {
+function fitFontSize(doc, text, maxWidth, start, min) {
+  let size = start;
+  while (size >= min) {
     doc.setFontSize(size);
-    const tooWide = lines.some((line) => doc.getTextWidth(line) > maxWidth);
-    if (!tooWide) return size;
+    if (doc.getTextWidth(text) <= maxWidth) return size;
     size -= 0.5;
   }
-  return minSize;
+  return min;
+}
+
+function drawCentered(doc, text, y, size, style = "bold") {
+  doc.setFont("helvetica", style);
+  doc.setFontSize(size);
+  doc.text(text, 148.5, y, { align: "center" });
 }
 
 function drawSenderBlock(doc, senderLines, crossSender) {
-  const x = SENDER_X;
-  const y = SENDER_Y_TOP;
+  const x = 8;
+  const y = 8;
+  const w = 86;
+  const h = 34;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(12);
-  let lineY = y + 16;
+  doc.setFontSize(10);
+  let lineY = y + 8;
   for (const line of senderLines) {
-    doc.text(line, x + 8, lineY);
-    lineY += 19;
+    doc.text(line, x + 3, lineY);
+    lineY += 6;
   }
 
   if (crossSender) {
-    doc.setLineWidth(1.6);
-    doc.rect(x, y, SENDER_W, SENDER_H);
-    doc.line(x, y, x + SENDER_W, y + SENDER_H);
-    doc.line(x + SENDER_W, y, x, y + SENDER_H);
+    doc.setLineWidth(0.55);
+    doc.rect(x, y, w, h);
+    doc.line(x, y, x + w, y + h);
+    doc.line(x + w, y, x, y + h);
   }
 }
 
-function drawCenteredText(doc, text, x, y) {
-  doc.text(text, x, y, { align: "center" });
-}
-
-function mergePostalCodeAndCity(lines) {
-  const cleaned = [...lines];
-
-  // Amazon/PDF.js peut extraire le code postal et la ville sur deux lignes séparées.
-  // Pour la lecture automatique par La Poste, on force la forme : "75017 PARIS".
-  if (cleaned.length >= 2) {
-    const postalIndex = cleaned.length - 2;
-    const postalCode = normalizeSpaces(cleaned[postalIndex]);
-    const city = normalizeSpaces(cleaned[cleaned.length - 1]);
-
-    if (POSTAL_CODE_REGEX.test(postalCode) && city) {
-      cleaned.splice(postalIndex, 2, `${postalCode} ${city.toUpperCase()}`);
-    }
-  }
-
-  return cleaned;
-}
-
-function estimateRecipientBlockHeight(nameSize, bodySize, middleCount, citySize) {
-  let height = nameSize;
-  if (middleCount > 0) {
-    height += 22;
-    height += middleCount * (bodySize + 9);
-  }
-  height += 22;
-  height += citySize;
-  return height;
+function splitAddress(addressLines) {
+  const lines = cleanLines(addressLines);
+  const cpIndex = lines.findIndex((line) => /^\d{5}\s+/.test(line));
+  const cpLine = cpIndex >= 0 ? uppercaseCityLine(lines[cpIndex]) : "";
+  const beforeCp = cpIndex >= 0 ? lines.slice(0, cpIndex) : lines;
+  const name = beforeCp[0] || "";
+  const address = beforeCp.slice(1);
+  return { name, address, cpLine };
 }
 
 function drawRecipientBlock(doc, addressLines) {
-  const cleaned = mergePostalCodeAndCity(stripTrailingFrance(addressLines));
-  if (!cleaned.length) return;
+  const { name, address, cpLine } = splitAddress(addressLines);
 
-  const name = cleaned[0];
-  const middleLines = cleaned.length > 1 ? cleaned.slice(1, -1) : [];
-  const cityLine = cleaned.length > 1 ? cleaned[cleaned.length - 1] : "";
+  const maxWidth = 178;
+  const nameSize = fitFontSize(doc, name, maxWidth, 22, 15);
+  const bodyMaxSize = 18;
+  const bodyMinSize = 13;
 
-  doc.setFont("helvetica", "bold");
+  const bodySizes = address.map((line) => fitFontSize(doc, line, maxWidth, bodyMaxSize, bodyMinSize));
+  const cpSize = cpLine ? fitFontSize(doc, cpLine, maxWidth, 28, 16) : 0;
 
-  const nameSize = fitFontSize(doc, [name], RECIPIENT_MAX_W, RECIPIENT_NAME_START, 18);
-  const bodySize = middleLines.length
-    ? fitFontSize(doc, middleLines, RECIPIENT_MAX_W, RECIPIENT_BODY_START, 14)
-    : RECIPIENT_BODY_START;
-  const citySize = cityLine
-    ? fitFontSize(doc, [cityLine], RECIPIENT_MAX_W, RECIPIENT_POSTAL_CITY_START, RECIPIENT_POSTAL_CITY_MIN)
-    : RECIPIENT_POSTAL_CITY_START;
+  const lineGapName = 11;
+  const lineGapBody = 8.7;
+  const gapBeforeCp = cpLine ? 12 : 0;
 
-  const blockHeight = estimateRecipientBlockHeight(nameSize, bodySize, middleLines.length, citySize);
-  let cursorY = RECIPIENT_BLOCK_CENTER_Y - (blockHeight / 2) + nameSize;
+  let totalHeight = nameSize * 0.45;
+  if (address.length) totalHeight += lineGapName + (address.length - 1) * lineGapBody + bodyMaxSize * 0.45;
+  if (cpLine) totalHeight += gapBeforeCp + cpSize * 0.45;
 
-  doc.setFontSize(nameSize);
-  drawCenteredText(doc, name, PAGE_WIDTH / 2, cursorY);
+  let y = 92 - totalHeight / 2;
 
-  cursorY += nameSize + 22;
-  doc.setFontSize(bodySize);
-  for (const line of middleLines) {
-    drawCenteredText(doc, line, PAGE_WIDTH / 2, cursorY);
-    cursorY += bodySize + 9;
+  if (name) {
+    drawCentered(doc, name, y, nameSize, "bold");
+    y += lineGapName;
   }
 
-  if (cityLine) {
-    cursorY += 14;
-    doc.setFontSize(citySize);
-    drawCenteredText(doc, cityLine, PAGE_WIDTH / 2, cursorY);
+  for (let i = 0; i < address.length; i++) {
+    drawCentered(doc, address[i], y, bodySizes[i], "bold");
+    y += lineGapBody;
+  }
+
+  if (cpLine) {
+    y += gapBeforeCp;
+    drawCentered(doc, cpLine, y, cpSize, "bold");
   }
 }
 
-function generateLabelsPdf(addresses, senderLines, crossSender) {
-  const { jsPDF } = jspdf;
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: [PAGE_WIDTH, PAGE_HEIGHT] });
+function generatePdf(addresses, senderLines, crossSender) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
 
   addresses.forEach((address, index) => {
-    if (index > 0) doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], "landscape");
+    if (index > 0) doc.addPage("a4", "landscape");
     drawSenderBlock(doc, senderLines, crossSender);
     drawRecipientBlock(doc, address);
   });
 
-  doc.save("etiquettes_label_maker_v3_1.pdf");
+  doc.save("etiquettes_label_maker.pdf");
 }
 
-async function generate() {
+function setStatus(message, kind) {
+  const el = $("status");
+  el.textContent = message || "";
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+async function onGenerate() {
   const file = $("pdfFile").files[0];
+  const platform = $("platform").value;
+
   if (!file) {
-    setStatus("Veuillez choisir un PDF Amazon source.", "error");
+    setStatus("Veuillez sélectionner un PDF.", "err");
     return;
   }
 
-  const senderLines = senderInputs.map((input) => input.value.trim()).filter(Boolean);
-  if (!senderLines.length) {
-    setStatus("Veuillez renseigner l’adresse expéditeur.", "error");
-    return;
-  }
+  saveSender();
+
+  const btn = $("generateBtn");
+  btn.disabled = true;
+  setStatus("Lecture du PDF en cours...", "");
 
   try {
-    saveSender();
-    setStatus("Lecture du PDF en cours...");
-    const addresses = await extractAddressesFromPdf(file);
-    setStatus("Génération du PDF en cours...");
-    generateLabelsPdf(addresses, senderLines, $("crossSender").checked);
-    setStatus(`${addresses.length} étiquette(s) générée(s) avec succès.`, "success");
-  } catch (error) {
-    console.error(error);
-    setStatus(`Erreur : ${error.message}`, "error");
+    const pages = await readPdfPages(file);
+    const addresses = [];
+
+    for (let i = 0; i < pages.length; i++) {
+      try {
+        const address = extractAddressByPlatform(pages[i], platform);
+        addresses.push(address);
+      } catch (err) {
+        throw new Error(`Page ${i + 1} : ${err.message}`);
+      }
+    }
+
+    if (!addresses.length) throw new Error("Aucune adresse trouvée.");
+
+    generatePdf(addresses, getSenderLines(), $("crossSender").checked);
+    setStatus(`${addresses.length} étiquette(s) générée(s).`, "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus(err.message || "Erreur pendant la génération.", "err");
+  } finally {
+    btn.disabled = false;
   }
 }
 
-loadSender();
-senderInputs.forEach((input) => input.addEventListener("input", saveSender));
-$("generateBtn").addEventListener("click", generate);
-$("resetSenderBtn").addEventListener("click", resetSender);
+window.addEventListener("DOMContentLoaded", () => {
+  loadSender();
+
+  for (const id of ["sender1", "sender2", "sender3", "sender4", "crossSender", "platform"]) {
+    $(id).addEventListener("change", saveSender);
+    $(id).addEventListener("input", saveSender);
+  }
+
+  $("generateBtn").addEventListener("click", onGenerate);
+});

@@ -1,53 +1,53 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Label Maker V3</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Label Maker V4</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
   <main class="app">
     <section class="card">
-      <div class="header">
-        <h1>Label Maker V3</h1>
+      <header class="hero">
+        <h1>Label Maker V4</h1>
+      </header>
+
+      <div class="field">
+        <label for="platform">Source du PDF</label>
+        <select id="platform">
+          <option value="amazon">Amz</option>
+          <option value="ebay">Ebay</option>
+          <option value="hennd">HennD</option>
+        </select>
       </div>
 
       <div class="field">
-        <label for="pdfFile">PDF Amz source</label>
-        <input id="pdfFile" type="file" accept="application/pdf,.pdf" />
+        <label for="pdfFile">PDF source</label>
+        <input id="pdfFile" type="file" accept="application/pdf">
       </div>
 
-      <fieldset class="sender-box">
+      <fieldset class="sender">
         <legend>Adresse expéditeur</legend>
-        <input id="sender1" type="text" value="Expéditeur : Entreprise Rebai" />
-        <input id="sender2" type="text" value="Lieu dit la Planche" />
-        <input id="sender3" type="text" value="89350 Villeneuve les genets" />
-        <input id="sender4" type="text" value="FRANCE" />
+        <input id="sender1" type="text" value="Expéditeur : Entreprise Rebai">
+        <input id="sender2" type="text" value="Lieu dit la Planche">
+        <input id="sender3" type="text" value="89350 Villeneuve les genets">
+        <input id="sender4" type="text" value="FRANCE">
       </fieldset>
 
-      <label class="checkline">
-        <input id="crossSender" type="checkbox" checked />
-        Encadrer et barrer la zone expéditeur
+      <label class="check">
+        <input id="crossSender" type="checkbox" checked>
+        Barrer l'adresse expéditeur
       </label>
 
-      <div class="actions">
-        <button id="generateBtn" type="button">Générer les étiquettes</button>
-        <button id="resetSenderBtn" type="button" class="secondary">Réinitialiser l’expéditeur</button>
-      </div>
+      <button id="generateBtn">Générer les étiquettes</button>
 
-      <div id="status" class="status" aria-live="polite"></div>
-    </section>
-
-    <section class="card muted">
-      <h2>Fonctionnement</h2>
-      <p>Tout se fait dans votre navigateur : le PDF n’est pas envoyé sur un serveur.</p>
-      <p>Votre adresse expéditeur est mémorisée automatiquement sur ce navigateur.</p>
+      <p id="status" class="status"></p>
     </section>
   </main>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=4.0"></script>
 </body>
 </html>

@@ -1,37 +1,29 @@
-# Label Maker V3.1
+# Label Maker V4
 
-Application web statique pour générer des étiquettes d'expédition à partir d'un PDF Amazon.
+Application GitHub Pages statique pour générer des étiquettes d'expédition depuis un PDF.
 
-## Fonctionnalités V3.1
+## Sources prises en charge
 
-- Import d'un PDF Amazon depuis le navigateur
-- Extraction des adresses d'expédition
-- Génération d'un PDF d'étiquettes, une étiquette par page
-- Adresse expéditeur en haut à gauche
-- Option pour encadrer et barrer l'adresse expéditeur
-- Mémorisation automatique de l'adresse expéditeur dans le navigateur
-- Code postal + ville sur une seule ligne
-- Ville en majuscules
-- Ligne CP + VILLE plus grande avec taille adaptative pour rester sur une seule ligne
-- Suppression définitive du libellé "Destinataire" sur les étiquettes
-- Bloc adresse mieux centré verticalement
-- Aucun serveur : tout se fait côté navigateur
+- Amz : bordereaux Amazon
+- Ebay : bordereaux / factures eBay
+- HennD : factures HenneDiscount
+
+## Fonctionnement
+
+1. Choisir la source du PDF.
+2. Importer le PDF.
+3. Vérifier ou modifier l'adresse expéditeur.
+4. Cliquer sur "Générer les étiquettes".
+
+L'adresse expéditeur et la source sélectionnée sont mémorisées dans le navigateur.
 
 ## Déploiement GitHub Pages
 
-1. Envoyer les fichiers à la racine du dépôt :
-   - `index.html`
-   - `style.css`
-   - `app.js`
-   - `README.md`
-2. Aller dans `Settings` > `Pages`.
-3. Choisir la branche `main` et le dossier `/root`.
-4. Enregistrer.
+Mettre à la racine du dépôt :
 
-## Confidentialité
+- `index.html`
+- `style.css`
+- `app.js`
+- `README.md`
 
-Le PDF Amazon est traité directement dans le navigateur. Il n'est pas envoyé à un serveur.
-
-## Note V3.1
-
-Le fichier `index.html` charge `app.js?v=3.1` pour éviter que le navigateur utilise une ancienne version en cache.
+Puis activer GitHub Pages depuis `Settings > Pages`.
