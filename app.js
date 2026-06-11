@@ -1,14 +1,14 @@
-/* Label Maker V4
-   - Amz : extraction depuis "Adresse d'expédition"
-   - Ebay : extraction depuis "Adresse de livraison"
-   - HennD : extraction depuis "Adresse de livraison"
-   - Génération PDF locale dans le navigateur
+/* Label Maker V4.1
+   Correction V4 :
+   - eBay : extraction stricte du bloc "Adresse de livraison", sans mélanger avec les colonnes vendeur/compte.
+   - HennD : extraction du bloc "Adresse de livraison" avant "Adresse de facturation".
+   - Amazon : logique conservée.
 */
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const STORAGE_KEY = "labelmaker_sender_v4";
+const STORAGE_KEY = "labelmaker_sender_v4_1";
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,13 +39,15 @@ function stripCountryAndPhone(lines) {
 }
 
 function uppercaseCityLine(line) {
-  const m = normalizeSpaces(line).match(/^(\d{5})\s+(.+)$/);
-  if (!m) return normalizeSpaces(line);
+  const clean = normalizeSpaces(line);
+  const m = clean.match(/^(\d{5})\s+(.+)$/);
+  if (!m) return clean;
   return `${m[1]} ${m[2].toUpperCase()}`;
 }
 
 function mergePostalCodeCity(lines) {
   const arr = cleanLines(lines);
+
   for (let i = 0; i < arr.length - 1; i++) {
     if (/^\d{5}$/.test(arr[i]) && arr[i + 1]) {
       arr[i] = `${arr[i]} ${arr[i + 1]}`;
@@ -53,10 +55,46 @@ function mergePostalCodeCity(lines) {
       break;
     }
   }
+
   return arr.map((line) => /^\d{5}\s+/.test(line) ? uppercaseCityLine(line) : line);
 }
 
-function extractAmazon(text) {
+function finalCleanAddress(lines) {
+  let out = cleanLines(lines);
+  out = stripCountryAndPhone(out);
+
+  // Supprime les régions eBay après virgule : "59330 Hautmont, Nord-Pas-de-Calais"
+  out = out.map((line) => {
+    const clean = normalizeSpaces(line);
+    if (/^\d{5}\s+/.test(clean) && clean.includes(",")) {
+      return clean.split(",")[0].trim();
+    }
+    return clean;
+  });
+
+  out = mergePostalCodeCity(out);
+  return out;
+}
+
+function extractBetweenSequential(text, startRegex, endRegex) {
+  const start = text.search(startRegex);
+  if (start < 0) return null;
+
+  const afterStart = text.slice(start);
+  const startMatch = afterStart.match(startRegex);
+  if (!startMatch) return null;
+
+  const contentStart = start + startMatch[0].length;
+  const afterContent = text.slice(contentStart);
+  const end = afterContent.search(endRegex);
+
+  if (end < 0) return afterContent;
+  return afterContent.slice(0, end);
+}
+
+function extractAmazon(page) {
+  const text = page.seqText;
+
   const matches = [...text.matchAll(/Adresse d['’]expédition\s*:?\s*([\s\S]*?)(?=Num[ée]ro de la commande|Date de commande|Service de livraison)/gi)];
   if (!matches.length) throw new Error("Bloc Adresse d'expédition introuvable.");
 
@@ -64,9 +102,7 @@ function extractAmazon(text) {
   let bestScore = -1;
 
   for (const match of matches) {
-    let lines = cleanLines(match[1].split(/\r?\n/));
-    lines = stripCountryAndPhone(lines);
-    lines = mergePostalCodeCity(lines);
+    const lines = finalCleanAddress(match[1].split(/\r?\n/));
     const score = lines.join(" ").length;
     if (score > bestScore) {
       bestScore = score;
@@ -78,44 +114,93 @@ function extractAmazon(text) {
   return best;
 }
 
-function extractEbay(text) {
-  const match = text.match(/Adresse de livraison\s*([\s\S]*?)(?=Lien du QR code|FACTURE\/BORDEREAU|Objet\s+Quantité|$)/i);
-  if (!match) throw new Error("Bloc Adresse de livraison eBay introuvable.");
+function extractEbay(page) {
+  const text = page.seqText;
 
-  let lines = cleanLines(match[1].split(/\r?\n/));
-  lines = stripCountryAndPhone(lines);
+  let block = extractBetweenSequential(
+    text,
+    /Adresse de livraison\s*/i,
+    /(?:Lien du QR code|FACTURE\/BORDEREAU|Objet\s+Quantité|VendeurEnFrance|https?:\/\/|$)/i
+  );
 
-  // eBay ajoute parfois la région après une virgule : "59330 Hautmont, Nord-Pas-de-Calais"
-  lines = lines.map((line) => {
-    const clean = normalizeSpaces(line);
-    if (/^\d{5}\s+/.test(clean) && clean.includes(",")) {
-      return clean.split(",")[0].trim();
-    }
-    return clean;
-  });
+  if (!block) {
+    // Repli visuel : on prend les items sous "Adresse de livraison" dans la colonne gauche.
+    block = extractVisualBlock(page, /Adresse de livraison/i, {
+      xMin: 0,
+      xMax: page.width * 0.55,
+      yMaxDelta: 170,
+      stopPatterns: [/Lien du QR code/i, /FACTURE/i, /Objet/i]
+    });
+  }
 
-  lines = mergePostalCodeCity(lines);
+  let lines = finalCleanAddress(String(block || "").split(/\r?\n/));
+
+  // Sécurité : si eBay a injecté un titre parasite.
+  lines = lines.filter(line => !/^Adresse/i.test(line) && !/^Lien du QR/i.test(line));
+
   if (!lines.length) throw new Error("Adresse eBay vide.");
   return lines;
 }
 
-function extractHennD(text) {
-  const match = text.match(/Adresse de livraison\s*([\s\S]*?)(?=Adresse de facturation|Num[ée]ro de facture|Référence\s+Produit|$)/i);
-  if (!match) throw new Error("Bloc Adresse de livraison HennD introuvable.");
+function extractHennD(page) {
+  const text = page.seqText;
 
-  let lines = cleanLines(match[1].split(/\r?\n/));
-  lines = stripCountryAndPhone(lines);
-  lines = mergePostalCodeCity(lines);
+  let block = extractBetweenSequential(
+    text,
+    /Adresse de livraison\s*/i,
+    /Adresse de facturation/i
+  );
+
+  if (!block) {
+    // Repli visuel : bloc sous "Adresse de livraison" à gauche, avant la table.
+    block = extractVisualBlock(page, /Adresse de livraison/i, {
+      xMin: 0,
+      xMax: page.width * 0.45,
+      yMaxDelta: 135,
+      stopPatterns: [/Adresse de facturation/i, /Num[ée]ro de facture/i, /Référence/i]
+    });
+  }
+
+  let lines = finalCleanAddress(String(block || "").split(/\r?\n/));
+  lines = lines.filter(line => !/^Adresse/i.test(line));
 
   if (!lines.length) throw new Error("Adresse HennD vide.");
   return lines;
 }
 
-function extractAddressByPlatform(text, platform) {
-  if (platform === "amazon") return extractAmazon(text);
-  if (platform === "ebay") return extractEbay(text);
-  if (platform === "hennd") return extractHennD(text);
+function extractAddressByPlatform(page, platform) {
+  if (platform === "amazon") return extractAmazon(page);
+  if (platform === "ebay") return extractEbay(page);
+  if (platform === "hennd") return extractHennD(page);
   throw new Error("Source PDF inconnue.");
+}
+
+function extractVisualBlock(page, headingRegex, opts) {
+  const items = page.items;
+  const heading = items.find(it => headingRegex.test(it.str));
+  if (!heading) return "";
+
+  const below = items
+    .filter(it => {
+      const isBelow = it.y > heading.y + 2 && it.y < heading.y + (opts.yMaxDelta || 150);
+      const inColumn = it.x >= (opts.xMin || 0) && it.x <= (opts.xMax || page.width);
+      return isBelow && inColumn;
+    })
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const rows = [];
+  for (const it of below) {
+    if ((opts.stopPatterns || []).some(rx => rx.test(it.str))) break;
+    let row = rows.find(r => Math.abs(r.y - it.y) <= 2.5);
+    if (!row) {
+      row = { y: it.y, items: [] };
+      rows.push(row);
+    }
+    row.items.push(it);
+  }
+
+  rows.sort((a, b) => a.y - b.y);
+  return rows.map(row => row.items.sort((a,b) => a.x - b.x).map(it => it.str).join(" ")).join("\n");
 }
 
 async function readPdfPages(file) {
@@ -124,32 +209,34 @@ async function readPdfPages(file) {
   const pages = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const items = content.items || [];
+    const pdfPage = await pdf.getPage(pageNum);
+    const viewport = pdfPage.getViewport({ scale: 1 });
+    const content = await pdfPage.getTextContent();
+    const rawItems = content.items || [];
 
-    // Regroupement par lignes visuelles pour garder un texte exploitable.
-    const rows = [];
-    for (const item of items) {
-      const y = Math.round(item.transform[5]);
-      const x = item.transform[4];
-      const str = normalizeSpaces(item.str);
-      if (!str) continue;
+    // Texte séquentiel : ordre interne du PDF, important pour eBay et HennD.
+    const seqText = rawItems
+      .map(it => normalizeSpaces(it.str))
+      .filter(Boolean)
+      .join("\n");
 
-      let row = rows.find((r) => Math.abs(r.y - y) <= 2);
-      if (!row) {
-        row = { y, items: [] };
-        rows.push(row);
-      }
-      row.items.push({ x, str });
-    }
+    // Items avec coordonnées normalisées depuis le haut de page.
+    const items = rawItems
+      .map(it => {
+        const str = normalizeSpaces(it.str);
+        const x = it.transform[4];
+        const yPdf = it.transform[5];
+        const y = viewport.height - yPdf;
+        return { str, x, y };
+      })
+      .filter(it => it.str);
 
-    rows.sort((a, b) => b.y - a.y);
-    const lines = rows.map((row) =>
-      row.items.sort((a, b) => a.x - b.x).map((it) => it.str).join(" ")
-    );
-
-    pages.push(lines.join("\n"));
+    pages.push({
+      seqText,
+      items,
+      width: viewport.width,
+      height: viewport.height
+    });
   }
 
   return pages;

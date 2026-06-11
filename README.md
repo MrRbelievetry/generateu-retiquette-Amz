@@ -1,4 +1,4 @@
-# Label Maker V4
+# Label Maker V4.1
 
 Application GitHub Pages statique pour générer des étiquettes d'expédition depuis un PDF.
 
@@ -8,14 +8,11 @@ Application GitHub Pages statique pour générer des étiquettes d'expédition d
 - Ebay : bordereaux / factures eBay
 - HennD : factures HenneDiscount
 
-## Fonctionnement
+## Correction V4.1
 
-1. Choisir la source du PDF.
-2. Importer le PDF.
-3. Vérifier ou modifier l'adresse expéditeur.
-4. Cliquer sur "Générer les étiquettes".
-
-L'adresse expéditeur et la source sélectionnée sont mémorisées dans le navigateur.
+- eBay : extraction stricte du bloc "Adresse de livraison".
+- HennD : extraction du bloc "Adresse de livraison" avant "Adresse de facturation".
+- Conservation de la mise en page V3.1.
 
 ## Déploiement GitHub Pages
 
