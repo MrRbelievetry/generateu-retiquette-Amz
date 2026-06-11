@@ -325,12 +325,12 @@ function drawRecipientBlock(doc, addressLines) {
   const { name, address, cpLine } = splitAddress(addressLines);
 
   const maxWidth = 178;
-  const nameSize = fitFontSize(doc, name, maxWidth, 22, 15);
-  const bodyMaxSize = 18;
-  const bodyMinSize = 13;
+  const nameSize = fitFontSize(doc, name, maxWidth, 30, 18);
+  const bodyMaxSize = 24;
+  const bodyMinSize = 16;
 
   const bodySizes = address.map((line) => fitFontSize(doc, line, maxWidth, bodyMaxSize, bodyMinSize));
-  const cpSize = cpLine ? fitFontSize(doc, cpLine, maxWidth, 28, 16) : 0;
+  const cpSize = cpLine ? fitFontSize(doc, cpLine, maxWidth, 40, 20) : 0;
 
   const lineGapName = 11;
   const lineGapBody = 8.7;
