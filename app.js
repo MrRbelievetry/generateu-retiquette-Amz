@@ -21,6 +21,8 @@ const RECIPIENT_TOP_Y = 255;
 const RECIPIENT_MAX_W = 420;
 const RECIPIENT_NAME_START = 36.5;
 const RECIPIENT_BODY_START = 30.0;
+const RECIPIENT_POSTAL_CITY_START = 38.0;
+const POSTAL_CODE_REGEX = /^\d{5}$/;
 
 const $ = (id) => document.getElementById(id);
 const senderInputs = [$("sender1"), $("sender2"), $("sender3"), $("sender4")];
@@ -146,12 +148,30 @@ function drawCenteredText(doc, text, x, y) {
   doc.text(text, x, y, { align: "center" });
 }
 
+function mergePostalCodeAndCity(lines) {
+  const cleaned = [...lines];
+
+  // Amazon/PDF.js peut extraire le code postal et la ville sur deux lignes séparées.
+  // Pour la lecture automatique par La Poste, on force la forme : "75017 PARIS".
+  if (cleaned.length >= 2) {
+    const postalIndex = cleaned.length - 2;
+    const postalCode = normalizeSpaces(cleaned[postalIndex]);
+    const city = normalizeSpaces(cleaned[cleaned.length - 1]);
+
+    if (POSTAL_CODE_REGEX.test(postalCode) && city) {
+      cleaned.splice(postalIndex, 2, `${postalCode} ${city.toUpperCase()}`);
+    }
+  }
+
+  return cleaned;
+}
+
 function drawRecipientBlock(doc, addressLines) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(25);
   drawCenteredText(doc, "Destinataire", PAGE_WIDTH / 2, RECIPIENT_TITLE_Y);
 
-  const cleaned = stripTrailingFrance(addressLines);
+  const cleaned = mergePostalCodeAndCity(stripTrailingFrance(addressLines));
   if (!cleaned.length) return;
 
   const name = cleaned[0];
@@ -179,7 +199,7 @@ function drawRecipientBlock(doc, addressLines) {
 
   if (cityLine) {
     cursorY += 12;
-    const citySize = fitFontSize(doc, [cityLine], RECIPIENT_MAX_W, nameSize, 23);
+    const citySize = fitFontSize(doc, [cityLine], RECIPIENT_MAX_W, RECIPIENT_POSTAL_CITY_START, 26);
     doc.setFontSize(citySize);
     drawCenteredText(doc, cityLine, PAGE_WIDTH / 2, cursorY);
   }

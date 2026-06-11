@@ -33,3 +33,8 @@ https://VOTRE-COMPTE.github.io/labelmaker-amazon-web/
 ## Confidentialité
 
 Le PDF Amazon est traité directement dans le navigateur. Il n'est pas envoyé à un serveur.
+
+## Correctif V1.1
+- Fusion automatique du code postal et de la ville sur une seule ligne.
+- Ligne code postal + ville affichée en plus gros pour faciliter la lecture postale.
+- Ville convertie en majuscules dans le PDF généré.
