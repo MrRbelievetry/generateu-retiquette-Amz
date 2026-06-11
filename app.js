@@ -340,7 +340,7 @@ function drawRecipientBlock(doc, addressLines) {
   if (address.length) totalHeight += lineGapName + (address.length - 1) * lineGapBody + bodyMaxSize * 0.45;
   if (cpLine) totalHeight += gapBeforeCp + cpSize * 0.45;
 
-  let y = 92 - totalHeight / 2;
+  let y = 104 - totalHeight / 2;
 
   if (name) {
     drawCentered(doc, name, y, nameSize, "bold");
