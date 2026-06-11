@@ -1,4 +1,4 @@
-# Label Maker V4.1
+# Label Maker V4.3
 
 Application GitHub Pages statique pour générer des étiquettes d'expédition depuis un PDF.
 
