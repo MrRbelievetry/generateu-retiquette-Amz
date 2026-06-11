@@ -1,0 +1,120 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f4f5f7;
+  color: #111827;
+}
+
+.app {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+  padding: 28px;
+}
+
+.hero {
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.field {
+  margin: 18px 0;
+}
+
+label, legend {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+input[type="text"],
+input[type="file"],
+select {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 16px;
+  background: #fff;
+}
+
+select {
+  cursor: pointer;
+}
+
+.sender {
+  margin: 20px 0 14px;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+}
+
+.sender input {
+  margin: 6px 0;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 22px;
+  font-weight: 600;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 15px 18px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #030712;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.status {
+  min-height: 24px;
+  margin: 18px 0 0;
+  font-weight: 700;
+}
+
+.status.ok {
+  color: #166534;
+}
+
+.status.err {
+  color: #b91c1c;
+}
