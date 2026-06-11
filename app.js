@@ -9,19 +9,19 @@ const DEFAULT_SENDER = [
   "FRANCE"
 ];
 
-const STORAGE_KEY = "labelmaker_amazon_sender_v1";
+const STORAGE_KEY = "label_maker_v3_sender";
 const PAGE_WIDTH = 792;
 const PAGE_HEIGHT = 612;
 const SENDER_X = 22;
 const SENDER_Y_TOP = 20;
 const SENDER_W = 235;
 const SENDER_H = 95;
-const RECIPIENT_TITLE_Y = 205;
-const RECIPIENT_TOP_Y = 255;
-const RECIPIENT_MAX_W = 420;
-const RECIPIENT_NAME_START = 36.5;
-const RECIPIENT_BODY_START = 30.0;
-const RECIPIENT_POSTAL_CITY_START = 38.0;
+const RECIPIENT_MAX_W = 500;
+const RECIPIENT_BLOCK_CENTER_Y = 350;
+const RECIPIENT_NAME_START = 24.0;
+const RECIPIENT_BODY_START = 19.0;
+const RECIPIENT_POSTAL_CITY_START = 34.0;
+const RECIPIENT_POSTAL_CITY_MIN = 18.0;
 const POSTAL_CODE_REGEX = /^\d{5}$/;
 
 const $ = (id) => document.getElementById(id);
@@ -166,11 +166,18 @@ function mergePostalCodeAndCity(lines) {
   return cleaned;
 }
 
-function drawRecipientBlock(doc, addressLines) {
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(25);
-  drawCenteredText(doc, "Destinataire", PAGE_WIDTH / 2, RECIPIENT_TITLE_Y);
+function estimateRecipientBlockHeight(nameSize, bodySize, middleCount, citySize) {
+  let height = nameSize;
+  if (middleCount > 0) {
+    height += 22;
+    height += middleCount * (bodySize + 9);
+  }
+  height += 22;
+  height += citySize;
+  return height;
+}
 
+function drawRecipientBlock(doc, addressLines) {
   const cleaned = mergePostalCodeAndCity(stripTrailingFrance(addressLines));
   if (!cleaned.length) return;
 
@@ -179,27 +186,30 @@ function drawRecipientBlock(doc, addressLines) {
   const cityLine = cleaned.length > 1 ? cleaned[cleaned.length - 1] : "";
 
   doc.setFont("helvetica", "bold");
-  const nameSize = fitFontSize(doc, [name], RECIPIENT_MAX_W, RECIPIENT_NAME_START, 23);
+
+  const nameSize = fitFontSize(doc, [name], RECIPIENT_MAX_W, RECIPIENT_NAME_START, 18);
+  const bodySize = middleLines.length
+    ? fitFontSize(doc, middleLines, RECIPIENT_MAX_W, RECIPIENT_BODY_START, 14)
+    : RECIPIENT_BODY_START;
+  const citySize = cityLine
+    ? fitFontSize(doc, [cityLine], RECIPIENT_MAX_W, RECIPIENT_POSTAL_CITY_START, RECIPIENT_POSTAL_CITY_MIN)
+    : RECIPIENT_POSTAL_CITY_START;
+
+  const blockHeight = estimateRecipientBlockHeight(nameSize, bodySize, middleLines.length, citySize);
+  let cursorY = RECIPIENT_BLOCK_CENTER_Y - (blockHeight / 2) + nameSize;
+
   doc.setFontSize(nameSize);
-  let cursorY = RECIPIENT_TOP_Y;
   drawCenteredText(doc, name, PAGE_WIDTH / 2, cursorY);
 
-  const bodySize = middleLines.length
-    ? fitFontSize(doc, middleLines, RECIPIENT_MAX_W, RECIPIENT_BODY_START, 18.5)
-    : RECIPIENT_BODY_START;
-
-  const step = bodySize + 9;
   cursorY += nameSize + 22;
-
   doc.setFontSize(bodySize);
   for (const line of middleLines) {
     drawCenteredText(doc, line, PAGE_WIDTH / 2, cursorY);
-    cursorY += step;
+    cursorY += bodySize + 9;
   }
 
   if (cityLine) {
-    cursorY += 12;
-    const citySize = fitFontSize(doc, [cityLine], RECIPIENT_MAX_W, RECIPIENT_POSTAL_CITY_START, 26);
+    cursorY += 14;
     doc.setFontSize(citySize);
     drawCenteredText(doc, cityLine, PAGE_WIDTH / 2, cursorY);
   }
@@ -215,7 +225,7 @@ function generateLabelsPdf(addresses, senderLines, crossSender) {
     drawRecipientBlock(doc, address);
   });
 
-  doc.save("etiquettes_amazon.pdf");
+  doc.save("etiquettes_label_maker_v3.pdf");
 }
 
 async function generate() {
